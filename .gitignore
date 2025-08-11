@@ -1,0 +1,63 @@
+# Node modules
+node_modules/
+
+# firebase service account key
+firebase/serviceAccountKey.json
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory
+coverage/
+
+# Environment variables
+.env
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Build output
+dist/
+build/
+
+# Cache
+.cache/
+.next/
+out/
+*.tsbuildinfo
+
+# TypeScript
+*.tsbuildinfo
+
+# PM2 logs
+pmlog.log
+
+# Local database or temp data
+*.sqlite
+*.sqlite3
+*.db
+*.bak
+*.tmp
+dump.rdb
+
+# Misc
+*.tgz
+*.zip
+*.log
+.vercel
