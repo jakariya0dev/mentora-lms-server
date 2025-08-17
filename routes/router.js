@@ -129,6 +129,12 @@ async function run() {
     // POST a new enrollment
     router.post("/", enrollmentControlleraddEnrollment);
 
+    // Sripe Payment Integration
+    router.post(
+      "/create-payment-intent",
+      enrollmentController.createPaymentIntent
+    );
+
     //  ==================================================
     //  ||             Assignment & Submission Section                   ||
     //  ==================================================
@@ -205,35 +211,6 @@ async function run() {
 
       const authParams = imagekit.getAuthenticationParameters();
       res.status(200).json(authParams);
-    });
-
-    // Sripe Payment Integration
-    router.post("/create-payment-intent", async (req, res) => {
-      const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
-      const { amount } = req.body;
-      if (!amount || typeof amount !== "number") {
-        return res.status(400).send({ error: "Invalid amount" });
-      }
-
-      if (amount < 0) {
-        return res.status(400).send({ error: "Amount cannot be negative" });
-      }
-
-      const amountInCents = Math.round(amount * 100);
-
-      try {
-        const paymentIntent = await stripe.paymentIntents.create({
-          amount: amountInCents,
-          currency: "usd",
-          payment_method_types: ["card"],
-        });
-
-        res.send({
-          clientSecret: paymentIntent.client_secret,
-        });
-      } catch (error) {
-        res.status(500).send({ error: error.message });
-      }
     });
 
     // GET /users (Fetch all users)

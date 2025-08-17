@@ -64,7 +64,36 @@ const addEnrollment = async (req, res) => {
   }
 };
 
+async function createPaymentIntent (req, res) {
+  const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+  const { amount } = req.body;
+  if (!amount || typeof amount !== "number") {
+    return res.status(400).send({ error: "Invalid amount" });
+  }
+
+  if (amount < 0) {
+    return res.status(400).send({ error: "Amount cannot be negative" });
+  }
+
+  const amountInCents = Math.round(amount * 100);
+
+  try {
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: amountInCents,
+      currency: "usd",
+      payment_method_types: ["card"],
+    });
+
+    res.send({
+      clientSecret: paymentIntent.client_secret,
+    });
+  } catch (error) {
+    res.status(500).send({ error: error.message });
+  }
+}
+
 module.exports = {
   getEnrollmentsByCourseId,
   addEnrollment,
+  createPaymentIntent,
 };
