@@ -6,19 +6,13 @@ const verifyToken = require("../middlewares/verifyToken");
 const verifyRole = require("../middlewares/verifyRole");
 
 const userController = require("../controllers/userController");
+const courseController = require("../controllers/courseController");
+const enrollmentController = require("../controllers/enrollmentController");
+const assignmentController = require("../controllers/assignmentController");
+const feedbackController = require("../controllers/feedbackController");
 
 async function run() {
   try {
-    const db = await connectDB();
-    const usersCollection = db.collection("users");
-    const reviewsCollection = db.collection("reviews");
-    const coursesCollection = db.collection("courses");
-    const enrollmentsCollection = db.collection("enrollments");
-    const assignmentsCollection = db.collection("assignments");
-    const submissionsCollection = db.collection("submissions");
-    const feedbacksCollection = db.collection("feedbacks");
-    console.log("✅ MongoDB connected");
-
     //  ==================================================
     //  ||             User Management                   ||
     //  ==================================================
@@ -72,758 +66,134 @@ async function run() {
     //  ||             Course Section                   ||
     //  ==================================================
 
-    // GET /courses (Get all courses with pagination for admin)
-    // GET /courses/all?page=1&limit=10
+    // Admin routes
     router.get(
       "/courses/all",
       verifyToken,
       verifyRole(["admin"]),
-      async (req, res) => {
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 10;
-        const skip = (page - 1) * limit;
-
-        try {
-          const totalCourses = await coursesCollection.countDocuments();
-          const totalPages = Math.ceil(totalCourses / limit);
-
-          const courses = await coursesCollection
-            .find()
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(limit)
-            .toArray();
-
-          if (courses.length > 0) {
-            res.status(200).json({
-              success: true,
-              message: "Courses fetched successfully",
-              currentPage: page,
-              courses,
-              totalCourses,
-              totalPages,
-              hasNextPage: page < totalPages,
-            });
-          } else {
-            res.status(200).json({
-              success: true,
-              message: "No courses found",
-              courses: [],
-            });
-          }
-        } catch (err) {
-          res.status(500).json({
-            success: false,
-            message: "Failed to load courses",
-            error: err.message,
-          });
-        }
-      }
+      courseController.getAllCoursesAdmin
     );
-
-    // GET /courses (Get all APPROVED courses with pagination and search for users)
-    router.get("/courses", async (req, res) => {
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 9;
-      const search = req.query.searchTerm || "";
-      const skip = (page - 1) * limit;
-
-      // Define the aggregation pipeline
-      const pipeline = [
-        { $match: { status: "approved" } },
-        {
-          $lookup: {
-            from: "users",
-            localField: "instructorEmail",
-            foreignField: "email",
-            as: "instructor",
-          },
-        },
-        {
-          $lookup: {
-            from: "enrollments",
-            localField: "_id",
-            foreignField: "courseId",
-            as: "enrollments",
-          },
-        },
-        {
-          $addFields: {
-            totalEnrollments: { $size: "$enrollments" },
-          },
-        },
-
-        { $skip: skip },
-        { $limit: limit },
-      ];
-
-      // If search term is provided, add a match stage to the pipeline
-      if (search) {
-        pipeline.unshift({
-          $match: {
-            title: { $regex: search, $options: "i" },
-          },
-        });
-      }
-
-      // Execute the aggregation pipeline
-
-      let totalCourses = await coursesCollection.countDocuments({
-        status: "approved",
-      });
-      if (search) {
-        totalCourses = await coursesCollection.countDocuments({
-          title: { $regex: search, $options: "i" },
-          status: "approved",
-        });
-      }
-      const totalPages = Math.ceil(totalCourses / limit);
-      const courses = await coursesCollection.aggregate(pipeline).toArray();
-      //
-      if (courses.length > 0) {
-        res.status(200).json({
-          success: true,
-          message: "Courses fetched successfully",
-          currentPage: page,
-          courses,
-          totalCourses,
-          totalPages,
-          hasNextPage: page < totalPages,
-        });
-      } else {
-        res.status(200).json({
-          success: false,
-          message: "No courses found",
-          courses: [],
-        });
-      }
-    });
-
-    // GET /courses/teacher/:email (Fetch courses by instructor email)
-    router.get(
-      "/courses/teacher/:email",
-      verifyToken,
-      verifyRole(["teacher"]),
-      async (req, res) => {
-        const email = req.params.email;
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 9;
-        const skip = (page - 1) * limit;
-        const query = { instructorEmail: email };
-        try {
-          const totalCourses = await coursesCollection.countDocuments(query);
-          const totalPages = Math.ceil(totalCourses / limit);
-          const result = await coursesCollection
-            .find(query)
-            .skip(skip)
-            .limit(limit)
-            .sort({ createdAt: -1 })
-            .toArray();
-          if (result.length > 0) {
-            res.status(200).json({
-              success: true,
-              message: "Courses fetched successfully",
-              courses: result,
-              currentPage: page,
-              totalCourses,
-              totalPages,
-              hasNextPage: page < totalPages,
-            });
-          } else {
-            res.status(200).json({
-              success: true,
-              message: "No courses found",
-              courses: [],
-            });
-          }
-        } catch {
-          res.status(500).send({ message: "Failed to load courses" });
-        }
-      }
-    );
-
-    // GET /courses/popular : Fetch popular courses by total enrollments
-    router.get("/courses/popular", async (req, res) => {
-      try {
-        const pipeline = [
-          {
-            $match: {
-              status: "approved",
-            },
-          },
-          {
-            $lookup: {
-              from: "users",
-              localField: "instructorEmail",
-              foreignField: "email",
-              as: "instructor",
-            },
-          },
-          {
-            $lookup: {
-              from: "enrollments",
-              localField: "_id",
-              foreignField: "courseId",
-              as: "enrollments",
-            },
-          },
-          {
-            $addFields: {
-              totalEnrollments: { $size: "$enrollments" },
-            },
-          },
-          { $sort: { totalEnrollments: -1 } },
-          { $limit: 6 },
-        ];
-
-        const popularCourses = await coursesCollection
-          .aggregate(pipeline)
-          .toArray();
-
-        if (popularCourses.length > 0) {
-          res.status(200).json({
-            success: true,
-            message: "Popular courses fetched successfully",
-            courses: popularCourses,
-          });
-        } else {
-          res.status(200).json({
-            success: true,
-            message: "No popular courses found",
-            courses: [],
-          });
-        }
-      } catch (err) {
-        res.status(500).send({ message: "Failed to load popular courses" });
-      }
-    });
-
-    // GET /courses/new : Fetch new courses by creation date
-    router.get("/courses/new", async (req, res) => {
-      try {
-        const pipeline = [
-          {
-            $match: {
-              status: "approved",
-            },
-          },
-          {
-            $lookup: {
-              from: "users",
-              localField: "instructorEmail",
-              foreignField: "email",
-              as: "instructor",
-            },
-          },
-          {
-            $lookup: {
-              from: "enrollments",
-              localField: "_id",
-              foreignField: "courseId",
-              as: "enrollments",
-            },
-          },
-          {
-            $addFields: {
-              totalEnrollments: { $size: "$enrollments" },
-            },
-          },
-          { $sort: { createdAt: -1 } },
-          { $limit: 6 },
-        ];
-
-        const newCourses = await coursesCollection
-          .aggregate(pipeline)
-          .toArray();
-
-        if (newCourses.length > 0) {
-          res.status(200).json({
-            success: true,
-            message: "New courses fetched successfully",
-            courses: newCourses,
-          });
-        } else {
-          res.status(200).json({
-            success: true,
-            message: "No new courses found",
-            courses: [],
-          });
-        }
-      } catch (err) {
-        res.status(500).send({ message: "Failed to load popular courses" });
-      }
-    });
-
-    // GET /courses/:id : (Fetch a single course by ID)
-    router.get("/courses/:id", async (req, res) => {
-      const id = req.params.id;
-      const pipeline = [
-        { $match: { _id: new ObjectId(id) } },
-        {
-          $lookup: {
-            from: "users",
-            localField: "instructorEmail",
-            foreignField: "email",
-            as: "instructor",
-          },
-        },
-        {
-          $lookup: {
-            from: "enrollments",
-            localField: "_id",
-            foreignField: "courseId",
-            as: "enrollments",
-          },
-        },
-        {
-          $unwind: "$instructor",
-        },
-        {
-          $addFields: {
-            totalEnrollments: { $size: "$enrollments" },
-          },
-        },
-      ];
-
-      try {
-        const result = await coursesCollection.aggregate(pipeline).toArray();
-
-        if (result.length > 0) {
-          res.status(200).json({
-            success: true,
-            message: "Course fetched successfully",
-            course: result[0],
-          });
-        } else {
-          res.status(204).json({
-            success: false,
-            message: "No course found",
-          });
-        }
-      } catch (err) {
-        console.error("Error fetching course:", err);
-        res.status(500).send({ message: "Failed to load course" });
-      }
-    });
-
-    // POST /courses :Add a new course
-    router.post(
-      "/courses/add",
-      verifyToken,
-      verifyRole(["teacher"]),
-      async (req, res) => {
-        try {
-          const course = {
-            ...req.body,
-            status: "pending",
-            createdAt: new Date(),
-          };
-
-          const result = await coursesCollection.insertOne(course);
-          if (result.acknowledged) {
-            res.status(200).json({
-              success: true,
-              message: "Course added successfully",
-              data: result,
-            });
-          } else {
-            res.status(400).json({
-              success: false,
-              message: "Failed to add course",
-              data: result,
-            });
-          }
-        } catch {
-          res
-            .status(500)
-            .send({ message: "Internal server error", success: false });
-        }
-      }
-    );
-
-    // Change course status (e.g., from pending to approved)
     router.patch(
       "/courses/change-status/:id",
       verifyToken,
       verifyRole(["admin"]),
-      async (req, res) => {
-        const { status } = req.body;
-        const id = req.params.id;
-        const filter = { _id: new ObjectId(id) };
-        const doc = { $set: { status: status } };
-        try {
-          const result = await coursesCollection.updateOne(filter, doc);
-          if (result.acknowledged) {
-            res.status(200).json({
-              success: true,
-              message: "Course status updated",
-              data: result,
-            });
-          } else {
-            res.status(400).json({
-              success: false,
-              message: "Course not found",
-            });
-          }
-        } catch {
-          res.status(500).send({ message: "Failed to update course status" });
-        }
-      }
+      courseController.changeCourseStatus
     );
 
-    // DELETE /courses/:id :Delete a course
-    router.delete(
-      "/courses/:id",
+    // Teacher routes
+    router.get(
+      "/courses/teacher/:email",
       verifyToken,
       verifyRole(["teacher"]),
-      async (req, res) => {
-        const id = req.params.id;
-        const filter = { _id: new ObjectId(id) };
-        try {
-          const result = await coursesCollection.deleteOne(filter);
-          if (result.acknowledged) {
-            res.status(200).json({
-              success: true,
-              message: "Course deleted successfully",
-              data: result,
-            });
-          } else {
-            res.status(400).json({
-              success: false,
-              message: "Course not found",
-            });
-          }
-        } catch {
-          res.status(500).send({ message: "Failed to delete course" });
-        }
-      }
+      courseController.getCoursesByTeacher
     );
-
-    // PATCH /courses/:id :Update a course
+    router.post(
+      "/courses/add",
+      verifyToken,
+      verifyRole(["teacher"]),
+      courseController.addCourse
+    );
     router.patch(
       "/courses/:id",
       verifyToken,
       verifyRole(["teacher"]),
-      async (req, res) => {
-        const id = req.params.id;
-        const filter = { _id: new ObjectId(id) };
-        const doc = { $set: req.body };
-        try {
-          const result = await coursesCollection.updateOne(filter, doc);
-          if (result.acknowledged) {
-            res.status(200).json({
-              success: true,
-              message: "Course updated successfully",
-              data: result,
-            });
-          } else {
-            res.status(400).json({
-              success: false,
-              message: "Course not found",
-            });
-          }
-        } catch {
-          res.status(500).send({ message: "Failed to update course" });
-        }
-      }
+      courseController.updateCourse
+    );
+    router.delete(
+      "/courses/:id",
+      verifyToken,
+      verifyRole(["teacher"]),
+      courseController.deleteCourse
     );
 
-    // GET /courses/enrolled/:email (Fetch enrolled courses by email)
-    router.get("/courses/enrolled/:email", verifyToken, async (req, res) => {
-      const { email } = req.params;
+    // Public routes
+    router.get("/courses", courseController.getApprovedCourses);
+    router.get("/courses/popular", courseController.getPopularCourses);
+    router.get("/courses/new", courseController.getNewCourses);
+    router.get("/courses/:id", courseController.getCourseById);
 
-      try {
-        const pipeline = [
-          { $match: { email } },
-          {
-            $lookup: {
-              from: "courses",
-              localField: "courseId",
-              foreignField: "_id",
-              as: "courseInfo",
-            },
-          },
-          {
-            $lookup: {
-              from: "users",
-              localField: "courseInfo.instructorEmail",
-              foreignField: "email",
-              as: "instructor",
-            },
-          },
-          {
-            $unwind: "$courseInfo",
-          },
-          {
-            $sort: { createdAt: -1 },
-          },
-        ];
-
-        const enrolledCourses = await enrollmentsCollection
-          .aggregate(pipeline)
-          .toArray();
-
-        if (enrolledCourses.length > 0) {
-          res.status(200).json({
-            success: true,
-            message: "Enrolled courses fetched successfully",
-            enrolledCourses,
-          });
-        } else {
-          res.status(202).json({
-            success: false,
-            message: "No enrolled courses found",
-            enrolledCourses: [],
-          });
-        }
-      } catch (err) {
-        console.error("Failed to fetch enrolled courses:", err);
-        res.status(500).json({
-          success: false,
-          message: "Internal server error",
-        });
-      }
-    });
+    // Enrolled courses (protected)
+    router.get(
+      "/courses/enrolled/:email",
+      verifyToken,
+      courseController.getEnrolledCourses
+    );
 
     //  ==================================================
     //  ||             Enrollments Section               ||
     //  ==================================================
 
-    // GET /enrollments/:id (Fetch all enrollments of a course)
-    router.get("/enrollments/:courseId", async (req, res) => {
-      const courseId = req.params.courseId;
-      const query = { courseId: courseId };
-      try {
-        const enrollments = await enrollmentsCollection.find(query).toArray();
+    // GET all enrollments of a course
+    router.get("/:courseId", enrollmentControllergetEnrollmentsByCourseId);
 
-        if (enrollments.length > 0) {
-          res.status(200).json({
-            success: true,
-            message: "enrollments fetched successfully",
-            enrollments,
-          });
-        } else {
-          res.status(202).json({
-            success: false,
-            message: "No assignments found",
-            enrollments: [],
-          });
-        }
-      } catch {
-        res.status(500).send({ message: "Internal server error" });
-      }
-    });
-
-    // POST /enrollments (Enroll a user in a course)
-    router.post("/enrollments", async (req, res) => {
-      const enrollment = {
-        ...req.body,
-        courseId: new ObjectId(req.body.courseId),
-      };
-
-      try {
-        const result = await enrollmentsCollection.insertOne(enrollment);
-        if (result.acknowledged) {
-          res.status(200).json({
-            success: true,
-            message: "Enrollment added successfully",
-            data: result,
-          });
-        } else {
-          res.status(400).json({
-            success: false,
-            message: "Failed to add enrollment",
-            data: result,
-          });
-        }
-      } catch {
-        res
-          .status(500)
-          .send({ message: "Internal server error", success: false });
-      }
-    });
+    // POST a new enrollment
+    router.post("/", enrollmentControlleraddEnrollment);
 
     //  ==================================================
     //  ||             Assignment & Submission Section                   ||
     //  ==================================================
 
-    // POST /assignments (Add a new assignment by Teacher)
+    // POST a new assignment
     router.post(
       "/assignments",
       verifyToken,
       verifyRole(["teacher"]),
-      async (req, res) => {
-        const assignment = {
-          ...req.body,
-          courseId: new ObjectId(req.body.courseId),
-        };
-        try {
-          const result = await assignmentsCollection.insertOne(assignment);
-
-          if (result.acknowledged) {
-            res.status(200).json({
-              success: true,
-              message: "Assignment added successfully",
-              data: result,
-            });
-          } else {
-            res.status(400).json({
-              success: false,
-              message: "Failed to add assignment",
-              data: result,
-            });
-          }
-        } catch {
-          res
-            .status(500)
-            .send({ message: "Internal server error", success: false });
-        }
-      }
+      assignmentController.addAssignment
     );
 
-    // GET /assignments/:courseId/:studentEmail
-    // (Fetch all assignments of a course of specific student with submissions)
+    // GET assignments of a course for a student
     router.get(
       "/assignments/:courseId/:studentEmail",
       verifyToken,
-      async (req, res) => {
-        const courseId = new ObjectId(req.params.courseId);
-        const studentEmail = req.params.studentEmail;
-
-        try {
-          const assignments = await assignmentsCollection
-            .aggregate([
-              {
-                $match: {
-                  courseId: new ObjectId(courseId),
-                },
-              },
-              {
-                $lookup: {
-                  from: "courses",
-                  localField: "courseId",
-                  foreignField: "_id",
-                  as: "courseInfo",
-                },
-              },
-              {
-                $lookup: {
-                  from: "submissions",
-                  localField: "_id",
-                  foreignField: "assignmentId",
-                  as: "studentSubmission",
-                },
-              },
-            ])
-            .toArray();
-
-          // console.log(assignments);
-
-          if (assignments.length > 0) {
-            res.status(200).json({
-              success: true,
-              message:
-                "Assignments with student submissions fetched successfully",
-              assignments,
-            });
-          } else {
-            res.status(202).json({
-              success: false,
-              message: "No assignments found",
-              assignments: [],
-            });
-          }
-        } catch (error) {
-          console.error("Error fetching assignments:", error);
-          res.status(500).send({ message: "Internal server error" });
-        }
-      }
+      assignmentController.getAssignmentsByCourseAndStudent
     );
 
-    // GET /assignments/:id (Fetch all assignments of a course)
-    router.get("/assignments/:courseId", async (req, res) => {
-      const courseId = req.params.courseId;
-      let query = { courseId: new ObjectId(courseId) };
+    // GET all assignments of a course
+    router.get(
+      "/assignments/:courseId",
+      assignmentController.getAssignmentsByCourse
+    );
 
-      try {
-        const assignments = await assignmentsCollection.find(query).toArray();
+    // GET all submissions of a course
+    router.get(
+      "/submissions/:courseId",
+      verifyToken,
+      assignmentController.getSubmissionsByCourse
+    );
 
-        if (assignments.length > 0) {
-          res.status(200).json({
-            success: true,
-            message: "Assignments fetched successfully",
-            assignments,
-          });
-        } else {
-          res.status(202).json({
-            success: false,
-            message: "No assignments found",
-            assignments: [],
-          });
-        }
-      } catch {
-        res.status(500).send({ message: "Internal server error" });
-      }
-    });
+    // POST a new submission
+    router.post(
+      "/submissions",
+      verifyToken,
+      assignmentController.addSubmission
+    );
 
-    // GET /submissions/:id (Fetch all submissions of a course)
-    router.get("/submissions/:courseId", verifyToken, async (req, res) => {
-      const courseId = req.params.courseId;
-      const studentEmail = req.query?.studentEmail || "";
-      let query = { courseId: new ObjectId(courseId) };
-      if (studentEmail) {
-        query = { courseId: new ObjectId(courseId), studentEmail };
-      }
+    //  ==================================================
+    //  ||             Feedback Section                   ||
+    //  ==================================================
 
-      try {
-        const submissions = await submissionsCollection.find(query).toArray();
+    // POST a new feedback
+    router.post(
+      "/",
+      verifyToken,
+      verifyRole(["student"]),
+      feedbackController.addFeedback
+    );
 
-        if (submissions.length > 0) {
-          res.status(200).json({
-            success: true,
-            message: "submissions fetched successfully",
-            submissions,
-          });
-        } else {
-          res.status(202).json({
-            success: false,
-            message: "No submissions found",
-            submissions: [],
-          });
-        }
-      } catch {
-        res.status(500).send({ message: "Internal server error" });
-      }
-    });
+    // GET all feedbacks
+    router.get("/", feedbackController.getFeedbacks);
 
-    // POST /submissions (Add a new submission by Student)
-    router.post("/submissions", verifyToken, async (req, res) => {
-      const submission = {
-        ...req.body,
-        assignmentId: new ObjectId(req.body.assignmentId),
-        courseId: new ObjectId(req.body.courseId),
-      };
-      try {
-        const result = await submissionsCollection.insertOne(submission);
-        if (result.acknowledged) {
-          res.status(200).json({
-            success: true,
-            message: "Submission added successfully",
-            data: result,
-          });
-        } else {
-          res.status(400).json({
-            success: false,
-            message: "Failed to add submission",
-            data: result,
-          });
-        }
-      } catch {
-        res
-          .status(500)
-          .send({ message: "Internal server error", success: false });
-      }
-    });
+    // PATCH a feedback by id
+    router.patch(
+      "/:id",
+      verifyToken,
+      verifyRole(["student"]),
+      feedbackController.updateFeedback
+    );
+
+    //  ==================================================
+    //  ||             others Section                     ||
+    //  ==================================================
 
     // upload image to imagekit.io
     router.get("/get-ik-signature", async (req, res) => {
@@ -865,160 +235,6 @@ async function run() {
         res.status(500).send({ error: error.message });
       }
     });
-
-    //  ==================================================
-    //  ||             Feedback Section                   ||
-    //  ==================================================
-
-    // POST /feedbacks (Add a new feedback by Student)
-    router.post(
-      "/feedbacks",
-      verifyToken,
-      verifyRole(["student"]),
-      async (req, res) => {
-        const feedback = {
-          ...req.body,
-          createdAt: new Date(),
-          courseId: new ObjectId(req.body.courseId),
-        };
-        try {
-          const result = await feedbacksCollection.insertOne(feedback);
-          if (result.acknowledged) {
-            res.status(200).json({
-              success: true,
-              message: "Feedback added successfully",
-              data: result,
-            });
-          } else {
-            res.status(400).json({
-              success: false,
-              message: "Failed to add feedback",
-              data: result,
-            });
-          }
-        } catch {
-          res
-            .status(500)
-            .send({ message: "Internal server error", success: false });
-        }
-      }
-    );
-
-    // GET /feedbacks?courseId=xxx&studentEmail=yyy (Fetch all feedbacks of a course or a specific student)
-    router.get("/feedbacks", async (req, res) => {
-      const courseId = req.query?.courseId;
-      const studentEmail = req.query?.studentEmail;
-
-      const query = {};
-      if (courseId) {
-        query.courseId = new ObjectId(courseId);
-      }
-      if (studentEmail) {
-        query.studentEmail = studentEmail;
-      }
-
-      const pipeline = [
-        {
-          $match: query,
-        },
-        {
-          $lookup: {
-            from: "users",
-            localField: "studentEmail",
-            foreignField: "email",
-            as: "userInfo",
-          },
-        },
-        {
-          $lookup: {
-            from: "courses",
-            localField: "courseId",
-            foreignField: "_id",
-            as: "courseInfo",
-          },
-        },
-        {
-          $unwind: {
-            path: "$userInfo",
-            preserveNullAndEmptyArrays: true,
-          },
-        },
-        {
-          $unwind: {
-            path: "$courseInfo",
-            preserveNullAndEmptyArrays: true,
-          },
-        },
-        {
-          $sort: {
-            rating: -1,
-          },
-        },
-        {
-          $limit: 6,
-        },
-      ];
-
-      try {
-        const feedbacks = await feedbacksCollection
-          .aggregate(pipeline)
-          .toArray();
-
-        if (feedbacks.length > 0) {
-          res.status(200).json({
-            success: true,
-            message: "Feedbacks fetched successfully",
-            feedbacks,
-          });
-        } else {
-          res.status(202).json({
-            success: true,
-            message: "No feedbacks found",
-            feedbacks: [],
-          });
-        }
-      } catch (error) {
-        console.error("Error fetching feedbacks:", error);
-        res.status(500).send({ message: "Internal server error" });
-      }
-    });
-
-    // PATCH /feedbacks/:id (Update a feedback by Student)
-    router.patch(
-      "/feedbacks/:id",
-      verifyToken,
-      verifyRole(["student"]),
-      async (req, res) => {
-        const id = req.params.id;
-        try {
-          const result = await feedbacksCollection.updateOne(
-            { _id: new ObjectId(id) },
-            { $set: req.body }
-          );
-          if (result.acknowledged) {
-            res.status(200).json({
-              success: true,
-              message: "Feedback updated successfully",
-              data: result,
-            });
-          } else {
-            res.status(400).json({
-              success: false,
-              message: "Failed to update feedback",
-              data: result,
-            });
-          }
-        } catch {
-          res
-            .status(500)
-            .send({ message: "Internal server error", success: false });
-        }
-      }
-    );
-
-    //  ==================================================
-    //  ||             others Section                     ||
-    //  ==================================================
 
     // GET /users (Fetch all users)
     router.get("/statistics", async (req, res) => {
