@@ -1,3 +1,13 @@
+const { ObjectId } = require("mongodb");
+const connectDB = require("../db");
+
+let usersCollection;
+
+(async () => {
+  const db = await connectDB();
+  usersCollection = db.collection("users");
+})();
+
 async function createNewUser(req, res) {
   const user = req.body;
 
