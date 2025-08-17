@@ -1,5 +1,5 @@
 const { ObjectId } = require("mongodb");
-const connectDB = require("../db");
+const connectDB = require("../config/dbConnection");
 
 let enrollmentsCollection;
 
@@ -64,7 +64,7 @@ const addEnrollment = async (req, res) => {
   }
 };
 
-async function createPaymentIntent (req, res) {
+async function createPaymentIntent(req, res) {
   const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
   const { amount } = req.body;
   if (!amount || typeof amount !== "number") {

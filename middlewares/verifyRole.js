@@ -1,4 +1,4 @@
-const connectDB = require("./../db");
+const connectDB = require("../config/dbConnection");
 
 const verifyRole = (allowedRoles = []) => {
   return async (req, res, next) => {

@@ -1,5 +1,5 @@
 const ImageKit = require("imagekit");
-const connectDB = require("../db");
+const connectDB = require("../config/dbConnection");
 
 let usersCollection;
 let coursesCollection;

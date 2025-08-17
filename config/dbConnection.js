@@ -8,12 +8,12 @@ let db;
 const connectDB = async () => {
   if (!client || !client.topology?.isConnected()) {
     client = new MongoClient(MONGO_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
+      // useNewUrlParser: true,
+      // useUnifiedTopology: true,
     });
     // await client.connect();
     db = client.db("mentora");
-    // console.log("✅ MongoDB connected");
+    console.log("✅ MongoDB connected Mentora");
   }
   return db;
 };

@@ -1,7 +1,7 @@
 const router = require("express").Router();
 const { ObjectId } = require("mongodb");
 const ImageKit = require("imagekit");
-const connectDB = require("../db");
+const connectDB = require("../config/dbConnection");
 const verifyToken = require("../middlewares/verifyToken");
 const verifyRole = require("../middlewares/verifyRole");
 
@@ -72,6 +72,7 @@ router.get(
   verifyRole(["admin"]),
   courseController.getAllCoursesAdmin
 );
+
 router.patch(
   "/courses/change-status/:id",
   verifyToken,
@@ -86,18 +87,21 @@ router.get(
   verifyRole(["teacher"]),
   courseController.getCoursesByTeacher
 );
+
 router.post(
   "/courses/add",
   verifyToken,
   verifyRole(["teacher"]),
   courseController.addCourse
 );
+
 router.patch(
   "/courses/:id",
   verifyToken,
   verifyRole(["teacher"]),
   courseController.updateCourse
 );
+
 router.delete(
   "/courses/:id",
   verifyToken,
@@ -123,10 +127,13 @@ router.get(
 //  ==================================================
 
 // GET all enrollments of a course
-router.get("/:courseId", enrollmentControllergetEnrollmentsByCourseId);
+router.get(
+  "/enrollments/:courseId",
+  enrollmentController.getEnrollmentsByCourseId
+);
 
 // POST a new enrollment
-router.post("/", enrollmentControlleraddEnrollment);
+router.post("/enrollments", enrollmentController.addEnrollment);
 
 // Sripe Payment Integration
 router.post("/create-payment-intent", enrollmentController.createPaymentIntent);
@@ -172,18 +179,18 @@ router.post("/submissions", verifyToken, assignmentController.addSubmission);
 
 // POST a new feedback
 router.post(
-  "/",
+  "/feedbacks",
   verifyToken,
   verifyRole(["student"]),
   feedbackController.addFeedback
 );
 
 // GET all feedbacks
-router.get("/", feedbackController.getFeedbacks);
+router.get("/feedbacks", feedbackController.getFeedbacks);
 
 // PATCH a feedback by id
 router.patch(
-  "/:id",
+  "feedbacks/:id",
   verifyToken,
   verifyRole(["student"]),
   feedbackController.updateFeedback
