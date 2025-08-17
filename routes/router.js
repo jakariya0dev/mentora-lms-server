@@ -10,6 +10,7 @@ const courseController = require("../controllers/courseController");
 const enrollmentController = require("../controllers/enrollmentController");
 const assignmentController = require("../controllers/assignmentController");
 const feedbackController = require("../controllers/feedbackController");
+const utilsController = require("../controllers/utilsController");
 
 async function run() {
   try {
@@ -201,44 +202,11 @@ async function run() {
     //  ||             others Section                     ||
     //  ==================================================
 
-    // upload image to imagekit.io
-    router.get("/get-ik-signature", async (req, res) => {
-      var imagekit = new ImageKit({
-        publicKey: process.env.IMAGEKIT_PUBLIC_KEY,
-        privateKey: process.env.IMAGEKIT_PRIVATE_KEY,
-        urlEndpoint: "https://ik.imagekit.io/jakariya",
-      });
+    // GET ImageKit signature
+    router.get("/get-ik-signature", utilsController.getIKSignature);
 
-      const authParams = imagekit.getAuthenticationParameters();
-      res.status(200).json(authParams);
-    });
-
-    // GET /users (Fetch all users)
-    router.get("/statistics", async (req, res) => {
-      try {
-        const totalUsers = await usersCollection.estimatedDocumentCount();
-        const totalCourses = await coursesCollection.estimatedDocumentCount();
-        const totalEnrollments =
-          await enrollmentsCollection.estimatedDocumentCount();
-
-        res.status(200).json({
-          success: true,
-          message: "Statistics fetched successfully",
-          data: {
-            totalUsers,
-            totalCourses,
-            totalEnrollments,
-          },
-        });
-      } catch (error) {
-        console.error("Error fetching users:", error);
-        res.status(500).send({ message: "Internal server error" });
-      }
-    });
-  } catch (error) {
-    console.error("❌ MongoDB connection failed:", error);
-    process.exit(1);
-  }
+    // GET statistics
+    router.get("/statistics", utilsController.getStatistics);
 }
 
 run();
